@@ -1,18 +1,3 @@
-// This #include statement was automatically added by the Spark IDE.
-#include "FOXFIRE_EmonLib/FOXFIRE_EmonLib.h"
-
-// This #include statement was automatically added by the Spark IDE.
-#include "FOXFIRE_BMP085/FOXFIRE_BMP085.h"
-
-// This #include statement was automatically added by the Spark IDE.
-#include "FOXFIRE_Si70xx/FOXFIRE_Si70xx.h"
-
-// This #include statement was automatically added by the Spark IDE.
-#include "FOXFIRE_Si1132/FOXFIRE_Si1132.h"
-
-// This #include statement was automatically added by the Spark IDE.
-#include "FOXFIRE_MPU6050/FOXFIRE_MPU6050.h"
-
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
