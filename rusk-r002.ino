@@ -24,10 +24,10 @@ double POWR2V = 0; //Watts
 double POWR3V = 0; //Watts
 
 int SOILT = A6;
-int SOILTV = 0; //Raw 0-4095
+float SOILTV = 0; //Celsius: Temperature (C) = Vout*41.67-40 :: Temperature (F) = Vout*75.006-40
 
 int SOILH = A7;
-int SOILHV = 0; //Raw 0-4095
+float SOILHV = 0; //Volumetric Water Content (VWC): http://www.vegetronix.com/TechInfo/How-To-Measure-VWC.phtml
 
 bool BMP180OK = false;
 float BMP180Pressure = 0; //hPa
@@ -56,7 +56,7 @@ int16_t gx, gy, gz;
 // These values are mapped and updated in the postSensingVariableMap() function
 char Sound[63] = "0";
 char Power[63] = "0.00 0.00 0.00";
-char SoilTnH[63] = "0 0";
+char SoilTnH[63] = "0.00 0.00";
 char PreTAlt[63] = "0.00 0.00 0.00";
 char AmbiTnH[63] = "0.00 0.00";
 char UVVisIR[63] = "0.00 0.00 0.00";
@@ -88,12 +88,10 @@ MPU6050 mpu6050(0x68);
 //********************************************************************************
 //********************************************************************************
 
-/*
 float mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
-*/
 
 void setPinsMode() {
     pinMode(I2CEN, OUTPUT);
@@ -161,13 +159,41 @@ int readPower() {
 }
 
 int readSoilTemperature() {
-    SOILTV = analogRead(SOILT);
+    //Formula basd on THERM200 documentation (Voltage Output Equation)
+    //http://www.vegetronix.com/Products/THERM200/
+
+    SOILTV = (mapFloat(analogRead(SOILT), 0, 4095, 0, 3.3) * 41.67) - 40;
 
     return 1;
 }
 
 int readSoilHumidity() {
-    SOILHV = analogRead(SOILH);
+    // Formula based on VH400 documentation (Voltage Output Curves)
+    // http://vegetronix.com/Products/VH400/VH400-Piecewise-Curve.phtml
+
+    float voltage = mapFloat(analogRead(SOILH), 0, 4095, 0, 3.3);
+
+    if (0 < voltage && voltage <= 1.1)
+    {
+        SOILHV = (10 * voltage) - 1;
+    }
+    else if (1.1 < voltage && voltage <= 1.3)
+    {
+        SOILHV = (25 * voltage) - 17.5;
+    }
+    else if (1.3 < voltage && voltage <= 1.82)
+    {
+        SOILHV = (48.08 * voltage) - 47.5;
+    }
+    else if (1.82 < voltage && voltage <= 2.2)
+    {
+        SOILHV = (26.32 * voltage) - 7.89;
+    }
+    else
+    {
+        // All undocumented and out of range values get a value of -1
+        SOILHV = -1;
+    }
 
     return 2;
 }
@@ -231,7 +257,7 @@ int readMotion() {
 void postSensingVariableMap() {
     sprintf(Sound, "%i", SOUNDV);
     sprintf(Power, "%.2f %.2f %.2f", POWR1V, POWR2V, POWR3V);
-    sprintf(SoilTnH, "%i %i", SOILTV, SOILHV);
+    sprintf(SoilTnH, "%.2f %.2f", SOILTV, SOILHV);
     sprintf(PreTAlt, "%.2f %.2f %.2f", BMP180Pressure, BMP180Temperature, BMP180Altitude);
     sprintf(AmbiTnH, "%.2f %.2f", Si7020Temperature, Si7020Humidity);
     sprintf(UVVisIR, "%.2f %.2f %.2f", Si1132UVIndex, Si1132Visible, Si1132InfraRd);
