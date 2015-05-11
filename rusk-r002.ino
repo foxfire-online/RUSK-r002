@@ -3,30 +3,32 @@
 //********************************************************************************
 
 // Initialize application variables
-int SENSORDELAY = 5000; // milliseconds (runs x1)
+int SENSORDELAY = 3000; // milliseconds (runs x1)
 int EVENTSDELAY = 1000; // milliseconds (runs x10)
-int SLEEP_DELAY = 45; // seconds (runs x1) - should get about 24 hours on 2100mAH - 0 to disable
+int OTAUPDDELAY = 7000; // milliseconds (runs x1)
+int SLEEP_DELAY = 40; // 40 seconds (runs x1) - should get about 24 hours on 2100mAH, 0 to disable and use RELAX_DELAY instead
 String SLEEP_DELAY_MIN = "15"; // seconds - easier to store as string then convert to int
 String SLEEP_DELAY_STATUS = "OK"; // always OK to start with
+int RELAX_DELAY = 40; // seconds (runs x1) - no power impact, just idle/relaxing
 
 int I2CEN = D2;
 int ALGEN = D3;
 int LED = D7;
 
-int SOUND = A1;
-int SOUNDV = 0; //Raw Peak-to-Peak Level/Amplitude
+int SOUND = A0;
+double SOUNDV = 0; //Volts Peak-to-Peak Level/Amplitude
 
-int POWR1 = A2;
-int POWR2 = A3;
-int POWR3 = A4;
+int POWR1 = A1;
+int POWR2 = A2;
+int POWR3 = A3;
 double POWR1V = 0; //Watts
 double POWR2V = 0; //Watts
 double POWR3V = 0; //Watts
 
-int SOILT = A6;
+int SOILT = A4;
 float SOILTV = 0; //Celsius: Temperature (C) = Vout*41.67-40 :: Temperature (F) = Vout*75.006-40
 
-int SOILH = A7;
+int SOILH = A5;
 float SOILHV = 0; //Volumetric Water Content (VWC): http://www.vegetronix.com/TechInfo/How-To-Measure-VWC.phtml
 
 bool BMP180OK = false;
@@ -44,8 +46,7 @@ float Si1132Visible = 0; //Lux
 float Si1132InfraRd = 0; //Lux
 
 bool ACCELOK = false;
-int16_t ax, ay, az;
-int16_t gx, gy, gz;
+int16_t ax, ay, az, gx, gy, gz;
 
 //********************************************************************************
 //********************************************************************************
@@ -54,7 +55,7 @@ int16_t gx, gy, gz;
 // Initialize cloud API float-to-string-hack
 // https://community.spark.io/t/get-reads-all-return-same-variable-value/1290/7
 // These values are mapped and updated in the postSensingVariableMap() function
-char Sound[63] = "0";
+char Sound[63] = "0.00";
 char Power[63] = "0.00 0.00 0.00";
 char SoilTnH[63] = "0.00 0.00";
 char PreTAlt[63] = "0.00 0.00 0.00";
@@ -62,27 +63,6 @@ char AmbiTnH[63] = "0.00 0.00";
 char UVVisIR[63] = "0.00 0.00 0.00";
 char AcclXYZ[63] = "0 0 0";
 char GyroXYZ[63] = "0 0 0";
-
-//********************************************************************************
-//********************************************************************************
-//********************************************************************************
-
-// Power
-EnergyMonitor emon1;
-EnergyMonitor emon2;
-EnergyMonitor emon3;
-
-// Weather
-Adafruit_BMP085_Unified bmp180 = Adafruit_BMP085_Unified(10085);
-FOXFIRE_Si70xx si7020;
-FOXFIRE_Si1132 si1132;
-
-// MPU6050
-// class default I2C address is 0x68
-// specific I2C addresses may be passed as a parameter here
-// AD0 low = 0x68 (default for InvenSense evaluation board)
-// AD0 high = 0x69
-MPU6050 mpu6050(0x68);
 
 //********************************************************************************
 //********************************************************************************
@@ -97,6 +77,8 @@ void setPinsMode() {
     pinMode(I2CEN, OUTPUT);
     pinMode(ALGEN, OUTPUT);
     pinMode(LED, OUTPUT);
+
+    pinMode(SOUND, INPUT);
 
     pinMode(POWR1, INPUT);
     pinMode(POWR2, INPUT);
@@ -125,8 +107,8 @@ int readSoundLevel() {
     unsigned long endWindow = millis() + sampleWindow;  // End of sample window
 
     unsigned int signalSample = 0;
-    unsigned int signalMin = 1024; // Minimum is the lowest signal below which we assume silence
-    unsigned int signalMax = signalMin; // Maximum signal starts out the same as the Minimum signal
+    unsigned int signalMin = 4095; // Minimum is the lowest signal below which we assume silence
+    unsigned int signalMax = 0; // Maximum signal starts out the same as the Minimum signal
 
     // collect data for milliseconds equal to sampleWindow
     while (millis() < endWindow)
@@ -142,12 +124,18 @@ int readSoundLevel() {
         }
     }
 
-    SOUNDV = signalMax - signalMin;  // max - min = peak-peak amplitude
+    //SOUNDV = signalMax - signalMin;  // max - min = peak-peak amplitude
+    SOUNDV = mapFloat((signalMax - signalMin), 0, 4095, 0, 3.3);
 
     return 1;
 }
 
 int readPower() {
+    // Power
+    EnergyMonitor emon1;
+    EnergyMonitor emon2;
+    EnergyMonitor emon3;
+
     // If voltage is fixed, e.g. 240V,
     // and resistance is known/assumed,
     // then the only variation is amperage.
@@ -199,6 +187,9 @@ int readSoilHumidity() {
 }
 
 int readWeatherBMP180() {
+    Adafruit_BMP085_Unified bmp180 = Adafruit_BMP085_Unified(10085);
+    BMP180OK = bmp180.begin(); // Initialize BMP180
+
     if (BMP180OK)
     {
         /* Get a new sensor event */
@@ -224,6 +215,9 @@ int readWeatherBMP180() {
 }
 
 int readWeatherSi7020() {
+    FOXFIRE_Si70xx si7020;
+    Si7020OK = si7020.begin(); // Initialize Si7020
+
     if (Si7020OK)
     {
         Si7020Temperature = si7020.readTemperature();
@@ -234,6 +228,9 @@ int readWeatherSi7020() {
 }
 
 int readWeatherSi1132() {
+    FOXFIRE_Si1132 si1132;
+    Si1132OK = si1132.begin(); // Initialize Si1132
+
     if (Si1132OK)
     {
         Si1132UVIndex = si1132.readUV() / 100;
@@ -245,6 +242,15 @@ int readWeatherSi1132() {
 }
 
 int readMotion() {
+    // MPU6050
+    // class default I2C address is 0x68
+    // specific I2C addresses may be passed as a parameter here
+    // AD0 low = 0x68 (default for InvenSense evaluation board)
+    // AD0 high = 0x69
+    MPU6050 mpu6050(0x68);
+    mpu6050.initialize(); // Initialize MPU6050...
+    ACCELOK = mpu6050.testConnection(); // ...and verify connection
+
     if (ACCELOK)
     {
         // read raw accel/gyro measurements from device
@@ -255,7 +261,7 @@ int readMotion() {
 }
 
 void postSensingVariableMap() {
-    sprintf(Sound, "%i", SOUNDV);
+    sprintf(Sound, "%.2f", SOUNDV);
     sprintf(Power, "%.2f %.2f %.2f", POWR1V, POWR2V, POWR3V);
     sprintf(SoilTnH, "%.2f %.2f", SOILTV, SOILHV);
     sprintf(PreTAlt, "%.2f %.2f %.2f", BMP180Pressure, BMP180Temperature, BMP180Altitude);
@@ -321,16 +327,6 @@ void loop(void) {
         digitalWrite(I2CEN, HIGH);
         digitalWrite(ALGEN, HIGH);
 
-        // Initialize BMP180
-        BMP180OK = bmp180.begin();
-        // Initialize Si7020
-        Si7020OK = si7020.begin();
-        // Initialize Si1132
-        Si1132OK = si1132.begin();
-        // Initialize MPU6050 and verify connection
-        mpu6050.initialize();
-        ACCELOK = mpu6050.testConnection();
-
         // Allow sensors to warm up
         delay(SENSORDELAY);
 
@@ -363,7 +359,7 @@ void loop(void) {
         Serial.print("BMPAlti:\t"); Serial.println(BMP180Altitude);
         Serial.print("AirTemp:\t"); Serial.println(Si7020Temperature);
         Serial.print("AirHumi:\t"); Serial.println(Si7020Humidity);
-        Serial.print("UVIndx0:\t"); Serial.println(Si1132UVIndex);
+        Serial.print("UVIndex:\t"); Serial.println(Si1132UVIndex);
         Serial.print("Visible:\t"); Serial.println(Si1132Visible);
         Serial.print("InfraRd:\t"); Serial.println(Si1132InfraRd);
 
@@ -389,12 +385,29 @@ void loop(void) {
         //********************************************************************************
         //********************************************************************************
 
+        if (SLEEP_DELAY > 0)
+        {
+            // Power down sensors
+            digitalWrite(I2CEN, LOW);
+            digitalWrite(ALGEN, LOW);
+        }
+
+        //********************************************************************************
+        //********************************************************************************
+        //********************************************************************************
+
         Serial.println("RUSK --> Device --> Post Sensing Activities");
 
         // run post sensing activity
-        digitalWrite(LED, HIGH);
         postSensingVariableMap();
         postSensingEventPublish();
+
+
+        Serial.println("RUSK --> Device --> OTA Update Window");
+
+        // set aside time to do OTA updates
+        digitalWrite(LED, HIGH);
+        Spark.process(); delay(OTAUPDDELAY);
         digitalWrite(LED, LOW);
 
         //********************************************************************************
@@ -403,23 +416,24 @@ void loop(void) {
 
         if (SLEEP_DELAY > 0)
         {
-            // Power down sensors
-            digitalWrite(I2CEN, LOW);
-            digitalWrite(ALGEN, LOW);
-
-            //********************************************************************************
-            //********************************************************************************
-            //********************************************************************************
-
             Serial.print("RUSK --> Sleep --> "); Serial.println(SLEEP_DELAY);
             Serial.print("RUSK --> Sleep --> "); Serial.println(SLEEP_DELAY_STATUS);
 
             // publish sleep event
             Spark.publish("Sleep", String(SLEEP_DELAY), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
 
-            // run internal processes and invoke light sleep mode
-            Spark.process();
+            // invoke light sleep mode
             Spark.sleep(SLEEP_DELAY);
+        }
+        else
+        {
+            Serial.print("RUSK --> Relax --> "); Serial.println(RELAX_DELAY);
+
+            // publish relax event
+            Spark.publish("Relax", String(RELAX_DELAY), RELAX_DELAY, PRIVATE); delay(EVENTSDELAY);
+
+            // pause briefly anyway
+            delay(RELAX_DELAY * 1000);
         }
     }
     else
