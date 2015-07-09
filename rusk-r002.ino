@@ -366,7 +366,7 @@ void setup() {
     // Initialize custom cloud API variables here
     // or edit above to monitor specific values for
     // services like IFTTT (last free of 10)
-    Spark.variable("IF3T_UVIndex", &Si1132UVIndex, DOUBLE);
+    Spark.variable("IF3T_Visible", &Si1132Visible, DOUBLE);
 
     // Initialize cloud API functions
     Spark.function("sleepDelay", setSleepDelay);
