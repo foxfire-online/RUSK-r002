@@ -6,10 +6,17 @@
 int SENSORDELAY = 3000; // milliseconds (runs x1)
 int EVENTSDELAY = 1000; // milliseconds (runs x10)
 int OTAUPDDELAY = 7000; // milliseconds (runs x1)
-int SLEEP_DELAY = 40; // 40 seconds (runs x1) - should get about 24 hours on 2100mAH, 0 to disable and use RELAX_DELAY instead
+int SLEEP_DELAY = 0; // 40 seconds (runs x1) - should get about 24 hours on 2100mAH, 0 to disable and use RELAX_DELAY instead
 String SLEEP_DELAY_MIN = "15"; // seconds - easier to store as string then convert to int
 String SLEEP_DELAY_STATUS = "OK"; // always OK to start with
-int RELAX_DELAY = 40; // seconds (runs x1) - no power impact, just idle/relaxing
+int RELAX_DELAY = 10; // seconds (runs x1) - no power impact, just idle/relaxing
+
+// Variables for the I2C scan
+byte I2CERR, I2CADR;
+
+//********************************************************************************
+//********************************************************************************
+//********************************************************************************
 
 int I2CEN = D2;
 int ALGEN = D3;
@@ -26,27 +33,28 @@ double POWR2V = 0; //Watts
 double POWR3V = 0; //Watts
 
 int SOILT = A4;
-float SOILTV = 0; //Celsius: Temperature (C) = Vout*41.67-40 :: Temperature (F) = Vout*75.006-40
+double SOILTV = 0; //Celsius: Temperature (C) = Vout*41.67-40 :: Temperature (F) = Vout*75.006-40
 
 int SOILH = A5;
-float SOILHV = 0; //Volumetric Water Content (VWC): http://www.vegetronix.com/TechInfo/How-To-Measure-VWC.phtml
+double SOILHV = 0; //Volumetric Water Content (VWC): http://www.vegetronix.com/TechInfo/How-To-Measure-VWC.phtml
 
 bool BMP180OK = false;
-float BMP180Pressure = 0; //hPa
-float BMP180Temperature = 0; //Celsius
-float BMP180Altitude = 0; //Meters
+double BMP180Pressure = 0; //hPa
+double BMP180Temperature = 0; //Celsius
+double BMP180Altitude = 0; //Meters
 
 bool Si7020OK = false;
-float Si7020Temperature = 0; //Celsius
-float Si7020Humidity = 0; //%Relative Humidity
+double Si7020Temperature = 0; //Celsius
+double Si7020Humidity = 0; //%Relative Humidity
 
 bool Si1132OK = false;
-float Si1132UVIndex = 0; //UV Index scoring is as follows: 1-2  -> Low, 3-5  -> Moderate, 6-7  -> High, 8-10 -> Very High, 11+  -> Extreme
-float Si1132Visible = 0; //Lux
-float Si1132InfraRd = 0; //Lux
+double Si1132UVIndex = 0; //UV Index scoring is as follows: 1-2  -> Low, 3-5  -> Moderate, 6-7  -> High, 8-10 -> Very High, 11+  -> Extreme
+double Si1132Visible = 0; //Lux
+double Si1132InfraRd = 0; //Lux
 
 bool ACCELOK = false;
-int16_t ax, ay, az, gx, gy, gz;
+int cx, cy, cz, ax, ay, az, gx, gy, gz;
+double tm; //Celsius
 
 //********************************************************************************
 //********************************************************************************
@@ -61,6 +69,7 @@ char SoilTnH[63] = "0.00 0.00";
 char PreTAlt[63] = "0.00 0.00 0.00";
 char AmbiTnH[63] = "0.00 0.00";
 char UVVisIR[63] = "0.00 0.00 0.00";
+char CompXYZ[63] = "0 0 0";
 char AcclXYZ[63] = "0 0 0";
 char GyroXYZ[63] = "0 0 0";
 
@@ -189,6 +198,8 @@ int readSoilHumidity() {
 int readWeatherBMP180() {
     Adafruit_BMP085_Unified bmp180 = Adafruit_BMP085_Unified(10085);
     BMP180OK = bmp180.begin(); // Initialize BMP180
+    float bufferPressure = 0;
+    float bufferTemperature = 0;
 
     if (BMP180OK)
     {
@@ -199,15 +210,21 @@ int readWeatherBMP180() {
         // Read weather measurements from device
         if (event.pressure)
         {
-            BMP180Pressure = event.pressure;
+            bufferPressure = event.pressure;
+            /* The pressure is initially loaded into a buffer variable */
+            /* We load it into the published variable this way to be compatible with the Spark.variable data types*/
+            BMP180Pressure = bufferPressure;
 
             /* First we get the current temperature from the BMP085 */
-            bmp180.getTemperature(&BMP180Temperature);
+            bmp180.getTemperature(&bufferTemperature);
+            /* The temperature is initially loaded into a buffer variable */
+            /* We load it into the published variable this way to be compatible with the Spark.variable data types*/
+            BMP180Temperature = bufferTemperature;
 
             /* Then convert the atmospheric pressure, SLP and temp to altitude */
             /* Update this next line with the current SLP for better results */
             float seaLevelPressure = SENSORS_PRESSURE_SEALEVELHPA;
-            BMP180Altitude = bmp180.pressureToAltitude(seaLevelPressure, BMP180Pressure, BMP180Temperature);
+            BMP180Altitude = bmp180.pressureToAltitude(seaLevelPressure, bufferPressure, bufferTemperature);
         }
     }
 
@@ -242,19 +259,52 @@ int readWeatherSi1132() {
 }
 
 int readMotion() {
-    // MPU6050
-    // class default I2C address is 0x68
-    // specific I2C addresses may be passed as a parameter here
-    // AD0 low = 0x68 (default for InvenSense evaluation board)
-    // AD0 high = 0x69
-    MPU6050 mpu6050(0x68);
-    mpu6050.initialize(); // Initialize MPU6050...
-    ACCELOK = mpu6050.testConnection(); // ...and verify connection
+    FOXFIRE_MPU9150 mpu9150;
+    ACCELOK = mpu9150.begin(mpu9150._addr_motion); // Initialize MPU9150
 
     if (ACCELOK)
     {
-        // read raw accel/gyro measurements from device
-        mpu6050.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+        // Clear the 'sleep' bit to start the sensor.
+        mpu9150.writeSensor(mpu9150._addr_motion, MPU9150_PWR_MGMT_1, 0);
+
+        // Set up compass
+        mpu9150.writeSensor(mpu9150._addr_compass, 0x0A, 0x00); //PowerDownMode
+        mpu9150.writeSensor(mpu9150._addr_compass, 0x0A, 0x0F); //SelfTest
+        mpu9150.writeSensor(mpu9150._addr_compass, 0x0A, 0x00); //PowerDownMode
+
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x24, 0x40); //Wait for Data at Slave0
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x25, 0x8C); //Set i2c address at slave0 at 0x0C
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x26, 0x02); //Set where reading at slave 0 starts
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x27, 0x88); //set offset at start reading and enable
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x28, 0x0C); //set i2c address at slv1 at 0x0C
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x29, 0x0A); //Set where reading at slave 1 starts
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x2A, 0x81); //Enable at set length to 1
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x64, 0x01); //overvride register
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x67, 0x03); //set delay rate
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x01, 0x80);
+
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x34, 0x04); //set i2c slv4 delay
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x64, 0x00); //override register
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x6A, 0x00); //clear usr setting
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x64, 0x01); //override register
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x6A, 0x20); //enable master i2c mode
+        mpu9150.writeSensor(mpu9150._addr_motion, 0x34, 0x13); //disable slv4
+
+        // Read all sensor values which the sensor provides
+        // Formated all values as x, y, and z in order for
+        // Compass, Gyro, Acceleration. The First value is
+        // the temperature.
+
+        tm = ( (double) mpu9150.readSensor(mpu9150._addr_motion, MPU9150_TEMP_OUT_L, MPU9150_TEMP_OUT_H) + 12412.0 ) / 340.0;
+        cx = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_CMPS_XOUT_L, MPU9150_CMPS_XOUT_H);
+        cy = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_CMPS_YOUT_L, MPU9150_CMPS_YOUT_H);
+        cz = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_CMPS_ZOUT_L, MPU9150_CMPS_ZOUT_H);
+        ax = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_ACCEL_XOUT_L, MPU9150_ACCEL_XOUT_H);
+        ay = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_ACCEL_YOUT_L, MPU9150_ACCEL_YOUT_H);
+        az = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_ACCEL_ZOUT_L, MPU9150_ACCEL_ZOUT_H);
+        gx = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_GYRO_XOUT_L, MPU9150_GYRO_XOUT_H);
+        gy = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_GYRO_YOUT_L, MPU9150_GYRO_YOUT_H);
+        gz = mpu9150.readSensor(mpu9150._addr_motion, MPU9150_GYRO_ZOUT_L, MPU9150_GYRO_ZOUT_H);
     }
 
     return ACCELOK ? 1 : 0;
@@ -267,6 +317,7 @@ void postSensingVariableMap() {
     sprintf(PreTAlt, "%.2f %.2f %.2f", BMP180Pressure, BMP180Temperature, BMP180Altitude);
     sprintf(AmbiTnH, "%.2f %.2f", Si7020Temperature, Si7020Humidity);
     sprintf(UVVisIR, "%.2f %.2f %.2f", Si1132UVIndex, Si1132Visible, Si1132InfraRd);
+    sprintf(CompXYZ, "%i %i %i", cx, cy, cz);
     sprintf(AcclXYZ, "%i %i %i", ax, ay, az);
     sprintf(GyroXYZ, "%i %i %i", gx, gy, gz);
 }
@@ -282,6 +333,7 @@ void postSensingEventPublish() {
     Spark.publish("PreTAlt", String(PreTAlt), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
     Spark.publish("AmbiTnH", String(AmbiTnH), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
     Spark.publish("UVVisIR", String(UVVisIR), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Spark.publish("CompXYZ", String(CompXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
     Spark.publish("AcclXYZ", String(AcclXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
     Spark.publish("GyroXYZ", String(GyroXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
 }
@@ -294,21 +346,27 @@ void setup() {
     // Open serial over USB
     Serial.begin(9600);
 
-    // Sets the I2C clock speed
-    //Wire.setSpeed(CLOCK_SPEED_400KHZ);
+    // Disable Interrupts
+    noInterrupts();
 
     // Initialize IO pins
     setPinsMode();
 
-    // Initialize cloud API variables
+    // Initialize cloud API variables (using 9 of 10 available)
     Spark.variable("Sound", &Sound, STRING);
     Spark.variable("Power", &Power, STRING);
     Spark.variable("SoilTnH", &SoilTnH, STRING);
     Spark.variable("PreTAlt", &PreTAlt, STRING);
     Spark.variable("AmbiTnH", &AmbiTnH, STRING);
     Spark.variable("UVVisIR", &UVVisIR, STRING);
+    Spark.variable("CompXYZ", &CompXYZ, STRING);
     Spark.variable("AcclXYZ", &AcclXYZ, STRING);
     Spark.variable("GyroXYZ", &GyroXYZ, STRING);
+
+    // Initialize custom cloud API variables here
+    // or edit above to monitor specific values for
+    // services like IFTTT (last free of 10)
+    Spark.variable("IF3T_UVIndex", &Si1132UVIndex, DOUBLE);
 
     // Initialize cloud API functions
     Spark.function("sleepDelay", setSleepDelay);
@@ -329,6 +387,35 @@ void loop(void) {
 
         // Allow sensors to warm up
         delay(SENSORDELAY);
+
+        //********************************************************************************
+        //********************************************************************************
+        //********************************************************************************
+
+        //Initialize the 'Wire' class for I2C Scan
+        Wire.begin();
+
+        // Scan for I2C devices
+        Serial.println("RUSK --> ScanI2C --> Scanning I2C for devices...");
+        for (I2CADR = 1; I2CADR < 127; I2CADR++)
+        {
+            // The i2c_scanner uses the return value of
+            // the Write.endTransmisstion to see if
+            // a device did acknowledge to the address.
+            Wire.beginTransmission(I2CADR);
+            I2CERR = Wire.endTransmission();
+
+            if (I2CERR == 0)
+            {
+                Serial.print("RUSK --> ScanI2C --> Device at 0x");
+                if (I2CADR < 16)
+                {
+                    Serial.print("0");
+                }
+                Serial.print(I2CADR, HEX);
+                Serial.println("");
+            }
+        }
 
         //********************************************************************************
         //********************************************************************************
@@ -368,6 +455,12 @@ void loop(void) {
         //********************************************************************************
 
         Serial.print("RUSK --> Motion --> "); Serial.println(readMotion());
+
+        // display tab-separated compass x/y/z values
+        Serial.print("CompXYZ:\t");
+        Serial.print(cx); Serial.print("\t");
+        Serial.print(cy); Serial.print("\t");
+        Serial.println(cz);
 
         // display tab-separated accel x/y/z values
         Serial.print("AcclXYZ:\t");
