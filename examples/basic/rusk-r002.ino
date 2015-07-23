@@ -1,3 +1,5 @@
+#include "FOXFIRE_RUSK_R002.h"
+
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
@@ -140,17 +142,28 @@ int readSoundLevel() {
 }
 
 int readPower() {
+    // Vrms for apparent power readings (when no AC-AC voltage sample is present)
+    byte Vrms = 240; //This is basic residential or socket voltage
+
     // Power
     EnergyMonitor emon1;
     EnergyMonitor emon2;
     EnergyMonitor emon3;
 
+    // Calibration factor = CT ratio / burden resistance
+    // (100A / 0.05A) / 33 Ohms burden = 60.606
+    // (100A / 0.05A) / 22 Ohms burden = 90.909
+    emon1.current(POWR1, 90.909);// Current: input pin, calibration.
+    emon2.current(POWR2, 90.909);// Current: input pin, calibration.
+    emon3.current(POWR3, 90.909);// Current: input pin, calibration.
+
+    // Calculate Apparent Power
     // If voltage is fixed, e.g. 240V,
     // and resistance is known/assumed,
     // then the only variation is amperage.
-    POWR1V = (emon1.calcIrms(1480) * 1000); //Watts
-    POWR2V = (emon2.calcIrms(1480) * 1000); //Watts
-    POWR3V = (emon3.calcIrms(1480) * 1000); //Watts
+    POWR1V = (emon1.calcIrms(1480) * Vrms); //Watts: 1480 is number of samples.
+    POWR2V = (emon2.calcIrms(1480) * Vrms); //Watts: 1480 is number of samples.
+    POWR3V = (emon3.calcIrms(1480) * Vrms); //Watts: 1480 is number of samples.
 
     return 1;
 }
