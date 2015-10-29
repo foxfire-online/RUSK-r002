@@ -1,3 +1,4 @@
+#include "FOXFIRE_RUSK_R002/FOXFIRE_RUSK_R002.h"
 #include "FOXFIRE_RUSK_R002/FOXFIRE_EmonLib.h"
 #include "FOXFIRE_RUSK_R002/FOXFIRE_Si1132.h"
 #include "FOXFIRE_RUSK_R002/FOXFIRE_Si70xx.h"
@@ -15,7 +16,7 @@ int OTAUPDDELAY = 7000; // milliseconds (runs x1)
 int SLEEP_DELAY = 0; // 40 seconds (runs x1) - should get about 24 hours on 2100mAH, 0 to disable and use RELAX_DELAY instead
 String SLEEP_DELAY_MIN = "15"; // seconds - easier to store as string then convert to int
 String SLEEP_DELAY_STATUS = "OK"; // always OK to start with
-int RELAX_DELAY = 10; // seconds (runs x1) - no power impact, just idle/relaxing
+int RELAX_DELAY = 5; // seconds (runs x1) - no power impact, just idle/relaxing
 
 // Variables for the I2C scan
 byte I2CERR, I2CADR;
@@ -363,6 +364,10 @@ void setup() {
     // Open serial over USB
     Serial.begin(9600);
 
+    // Set I2C speed
+    // --> 400Khz seems to help stabilize I2C bus operation with packaged sensors
+    Wire.setSpeed(CLOCK_SPEED_400KHZ);
+
     // Disable Interrupts
     noInterrupts();
 
@@ -517,18 +522,14 @@ void loop(void) {
         postSensingEventPublish();
 
 
-        Serial.println("RUSK --> Device --> OTA Update Window");
+        //Serial.println("RUSK --> Device --> OTA Update Window Begin");
 
         // set aside time to do OTA updates
-        digitalWrite(LED, HIGH);
-        Particle.process(); delay(OTAUPDDELAY);
-        digitalWrite(LED, LOW);
+        //digitalWrite(LED, HIGH);
+        //Particle.process(); delay(OTAUPDDELAY);
+        //digitalWrite(LED, LOW);
 
-        //********************************************************************************
-        //********************************************************************************
-        //********************************************************************************
-
-        Wire.reset();
+        //Serial.println("RUSK --> Device --> OTA Update Window End");
 
         //********************************************************************************
         //********************************************************************************
