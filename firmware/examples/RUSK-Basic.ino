@@ -365,7 +365,7 @@ void setup() {
     Serial.begin(9600);
 
     // Set I2C speed
-    // --> 400Khz seems to help stabilize I2C bus operation with packaged sensors
+    // --> 400Khz seems to work best with the Photon with the packaged I2C sensors
     Wire.setSpeed(CLOCK_SPEED_400KHZ);
 
     // Disable Interrupts
