@@ -1,3 +1,9 @@
+#include "FOXFIRE_RUSK_R002/FOXFIRE_EmonLib.h"
+#include "FOXFIRE_RUSK_R002/FOXFIRE_Si1132.h"
+#include "FOXFIRE_RUSK_R002/FOXFIRE_Si70xx.h"
+#include "FOXFIRE_RUSK_R002/FOXFIRE_BMP085.h"
+#include "FOXFIRE_RUSK_R002/FOXFIRE_MPU9150.h"
+
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
