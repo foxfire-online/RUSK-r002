@@ -223,13 +223,13 @@ int readWeatherBMP180() {
         {
             bufferPressure = event.pressure;
             /* The pressure is initially loaded into a buffer variable */
-            /* We load it into the published variable this way to be compatible with the Spark.variable data types*/
+            /* We load it into the published variable this way to be compatible with the Particle.variable data types*/
             BMP180Pressure = bufferPressure;
 
             /* First we get the current temperature from the BMP085 */
             bmp180.getTemperature(&bufferTemperature);
             /* The temperature is initially loaded into a buffer variable */
-            /* We load it into the published variable this way to be compatible with the Spark.variable data types*/
+            /* We load it into the published variable this way to be compatible with the Particle.variable data types*/
             BMP180Temperature = bufferTemperature;
 
             /* Then convert the atmospheric pressure, SLP and temp to altitude */
@@ -337,16 +337,16 @@ void postSensingEventPublish() {
     // Publish update events
     // --> up to a burst of 4 at rate of 1 per second
     // --> testing delay of 1.0 seconds after each event
-    Spark.publish("Ready", NULL, String(EVENTSDELAY / 1000).toInt() * 8, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("Sound", String(Sound), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("Power", String(Power), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("SoilTnH", String(SoilTnH), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("PreTAlt", String(PreTAlt), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("AmbiTnH", String(AmbiTnH), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("UVVisIR", String(UVVisIR), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("CompXYZ", String(CompXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("AcclXYZ", String(AcclXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
-    Spark.publish("GyroXYZ", String(GyroXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("Ready", NULL, String(EVENTSDELAY / 1000).toInt() * 8, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("Sound", String(Sound), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("Power", String(Power), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("SoilTnH", String(SoilTnH), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("PreTAlt", String(PreTAlt), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("AmbiTnH", String(AmbiTnH), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("UVVisIR", String(UVVisIR), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("CompXYZ", String(CompXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("AcclXYZ", String(AcclXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+    Particle.publish("GyroXYZ", String(GyroXYZ), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
 }
 
 //********************************************************************************
@@ -364,29 +364,31 @@ void setup() {
     setPinsMode();
 
     // Initialize cloud API variables (using 9 of 10 available)
-    Spark.variable("Sound", &Sound, STRING);
-    Spark.variable("Power", &Power, STRING);
-    Spark.variable("SoilTnH", &SoilTnH, STRING);
-    Spark.variable("PreTAlt", &PreTAlt, STRING);
-    Spark.variable("AmbiTnH", &AmbiTnH, STRING);
-    Spark.variable("UVVisIR", &UVVisIR, STRING);
-    Spark.variable("CompXYZ", &CompXYZ, STRING);
-    Spark.variable("AcclXYZ", &AcclXYZ, STRING);
-    Spark.variable("GyroXYZ", &GyroXYZ, STRING);
+    Particle.variable("Sound", Sound);
+    Particle.variable("Power", Power);
+    Particle.variable("SoilTnH", SoilTnH);
+    Particle.variable("PreTAlt", PreTAlt);
+    Particle.variable("AmbiTnH", AmbiTnH);
+    Particle.variable("UVVisIR", UVVisIR);
+    Particle.variable("CompXYZ", CompXYZ);
+    Particle.variable("AcclXYZ", AcclXYZ);
+    Particle.variable("GyroXYZ", GyroXYZ);
 
     // Initialize custom cloud API variables here
     // or edit above to monitor specific values for
     // services like IFTTT (last free of 10)
-    Spark.variable("IF3T_Visible", &Si1132Visible, DOUBLE);
+    Particle.variable("IF3T_Visible", Si1132Visible);
 
     // Initialize cloud API functions
-    Spark.function("sleepDelay", setSleepDelay);
+    Particle.function("sleepDelay", setSleepDelay);
 }
 
 void loop(void) {
-    if (Spark.connected())
+    if (Particle.connected())
     {
-        Serial.print("RUSK --> Device --> "); Serial.println(Spark.deviceID());
+        Serial.print("RUSK --> DevVer --> "); Serial.println(System.version());
+        Serial.print("RUSK --> Device --> "); Serial.println(Particle.deviceID());
+        Serial.print("RUSK --> DevAdr --> "); Serial.println(WiFi.localIP());
 
         //********************************************************************************
         //********************************************************************************
@@ -403,8 +405,10 @@ void loop(void) {
         //********************************************************************************
         //********************************************************************************
 
-        //Initialize the 'Wire' class for I2C Scan
-        Wire.begin();
+        //Initialize the I2C bus if not already enabled
+        if (!Wire.isEnabled()) {
+            Wire.begin();
+        }
 
         // Scan for I2C devices
         Serial.println("RUSK --> ScanI2C --> Scanning I2C for devices...");
@@ -511,8 +515,14 @@ void loop(void) {
 
         // set aside time to do OTA updates
         digitalWrite(LED, HIGH);
-        Spark.process(); delay(OTAUPDDELAY);
+        Particle.process(); delay(OTAUPDDELAY);
         digitalWrite(LED, LOW);
+
+        //********************************************************************************
+        //********************************************************************************
+        //********************************************************************************
+
+        Wire.reset();
 
         //********************************************************************************
         //********************************************************************************
@@ -524,17 +534,17 @@ void loop(void) {
             Serial.print("RUSK --> Sleep --> "); Serial.println(SLEEP_DELAY_STATUS);
 
             // publish sleep event
-            Spark.publish("Sleep", String(SLEEP_DELAY), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
+            Particle.publish("Sleep", String(SLEEP_DELAY), SLEEP_DELAY, PRIVATE); delay(EVENTSDELAY);
 
             // invoke light sleep mode
-            Spark.sleep(SLEEP_DELAY);
+            System.sleep(SLEEP_DELAY);
         }
         else
         {
             Serial.print("RUSK --> Relax --> "); Serial.println(RELAX_DELAY);
 
             // publish relax event
-            Spark.publish("Relax", String(RELAX_DELAY), RELAX_DELAY, PRIVATE); delay(EVENTSDELAY);
+            Particle.publish("Relax", String(RELAX_DELAY), RELAX_DELAY, PRIVATE); delay(EVENTSDELAY);
 
             // pause briefly anyway
             delay(RELAX_DELAY * 1000);
@@ -544,7 +554,7 @@ void loop(void) {
     {
         if (WiFi.ready())
         {
-            Spark.connect();
+            Particle.connect();
         }
     }
 }
