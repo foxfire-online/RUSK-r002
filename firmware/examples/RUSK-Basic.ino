@@ -398,8 +398,9 @@ void loop(void) {
     if (Particle.connected())
     {
         Serial.print("RUSK --> DevVer --> "); Serial.println(System.version());
-        Serial.print("RUSK --> Device --> "); Serial.println(Particle.deviceID());
-        Serial.print("RUSK --> DevAdr --> "); Serial.println(WiFi.localIP());
+        Serial.print("RUSK --> Device --> "); Serial.println(System.deviceID());
+        //Serial.print("RUSK --> DevAdr --> "); Serial.println(WiFi.localIP());
+        //Serial.print("RUSK --> DevAdr --> "); Serial.println(Cellular.localIP());
 
         //********************************************************************************
         //********************************************************************************
@@ -559,9 +560,6 @@ void loop(void) {
     }
     else
     {
-        if (WiFi.ready())
-        {
-            Particle.connect();
-        }
+        Particle.connect();
     }
 }

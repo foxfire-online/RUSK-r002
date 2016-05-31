@@ -46,7 +46,7 @@
 
 #define MPU9150_SELF_TEST_X        0x0D   // R/W
 #define MPU9150_SELF_TEST_Y        0x0E   // R/W
-#define MPU9150_SELF_TEST_X        0x0F   // R/W
+#define MPU9150_SELF_TEST_Z        0x0F   // R/W
 #define MPU9150_SELF_TEST_A        0x10   // R/W
 #define MPU9150_SMPLRT_DIV         0x19   // R/W
 #define MPU9150_CONFIG             0x1A   // R/W
